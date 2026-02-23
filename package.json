@@ -1,0 +1,24 @@
+{
+  "name": "farcaster-airdrop-bot",
+  "version": "1.0.0",
+  "description": "Farcaster airdrop alerts via GitHub Actions",
+  "main": "bot.js",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
+```
+
+4. Click **"Commit new file"**
+
+---
+
+## Step 6 — Create the Workflow File (The Scheduler)
+
+This is the most important file — it tells GitHub *when* and *how* to run your bot automatically.
+
+1. Click **"Add file"** → **"Create new file"**
+2. In the filename box, type this path exactly (including the slashes):
+```
+.github/workflows/airdrop-bot.yml
