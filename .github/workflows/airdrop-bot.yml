@@ -1,152 +1,25 @@
-# ─────────────────────────────────────────────────────────────────────────────
-#  Farcaster Airdrop Bot — Runs automatically every 5 minutes
-#  Secrets are stored in GitHub Settings → Secrets → Actions
-# ─────────────────────────────────────────────────────────────────────────────
-
-name: Farcaster Airdrop Bot
-
+name: Airdrop Bot
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
-  workflow_dispatch:         # also lets you trigger it manually with a button
+    - cron: '0 * * * *' # Runs every hour
+  workflow_dispatch: # Allows manual testing
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 4       # stops the job before the next 5-min run starts
-
     steps:
-
-      # Step A: Download your repository files onto the GitHub server
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step B: Restore seen.json from cache (so we don't resend old alerts)
-      # GitHub saves and restores this file between every run automatically.
-      - name: Restore seen.json from cache
-        uses: actions/cache@v4
-        with:
-          path: seen.json
-          key: seen-json-${{ github.run_id }}
-          restore-keys: |
-            seen-json-
-
-      # Step C: Install Node.js
-      - name: Set up Node.js
+      - name: Set up Node.js # Or Python/Go
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
-      # Step D: Install the bot's dependencies (axios)
       - name: Install dependencies
         run: npm install
 
-      # Step E: Run the bot — it checks all channels and exits when done
-      - name: Run bot
+      - name: Run Bot
         env:
-          NEYNAR_API_KEY:        ${{ secrets.NEYNAR_API_KEY }}
-          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
-          FARCASTER_CHANNELS:    ${{ secrets.FARCASTER_CHANNELS }}
-          KEYWORDS:              ${{ secrets.KEYWORDS }}
-        run: node bot.js
-
-      # seen.json is automatically saved to cache after the job finishes (by Step B above)
-```
-
-4. Click **"Commit new file"**
-
----
-
-## Step 7 — Run It Manually to Test
-
-You don't have to wait 5 minutes for the first run. Trigger it now:
-
-1. Click the **"Actions"** tab at the top of your repository
-2. In the left sidebar you'll see **"Farcaster Airdrop Bot"** — click it
-3. On the right side, click the **"Run workflow"** button
-4. Click the green **"Run workflow"** button in the dropdown
-
-You'll see a new row appear with a yellow spinning circle. Click on it to watch it run live.
-
-**What a successful run looks like:**
-```
-============================================================
-  Farcaster Airdrop Bot — GitHub Actions Run
-============================================================
-Channels : airdrop, defi, crypto
-Keywords : airdrop, claim, whitelist, free mint, snapshot
-Dry-run  : false
-
-Loaded 0 previously seen hashes from cache.
-
-[2024-01-15 10:00:01] #airdrop — no new matches 🔍
-[2024-01-15 10:00:02] #defi — no new matches 🔍
-[2024-01-15 10:00:03] #crypto — no new matches 🔍
-
-Saved 15 seen hashes to cache.
-
-Run complete. GitHub Actions will run this again on schedule.
-```
-
-A green checkmark ✅ means everything worked. From now on, GitHub runs this automatically every 5 minutes without you doing anything.
-
----
-
-## What Your Repository Looks Like When Done
-```
-farcaster-airdrop-bot/          ← your GitHub repository
-├── .github/
-│   └── workflows/
-│       └── airdrop-bot.yml     ← the scheduler (you created this)
-├── bot.js                      ← the bot code (you created this)
-├── package.json                ← dependency list (you created this)
-└── README.md                   ← auto-created by GitHub
-```
-
-`seen.json` is never stored in the repository — GitHub Actions caches it invisibly between runs.
-
----
-
-## How to Check If It's Working
-
-**View live logs:**
-1. Click the **"Actions"** tab
-2. Click on any run to see full logs
-3. If you see green ✅ — it worked
-
-**If a run has a red ✗:**
-- Click on it → click **"run-bot"** → read the error message
-- 9 times out of 10 it's a typo in a secret name
-
----
-
-## Troubleshooting
-
-| What you see | Why it happened | Fix |
-|---|---|---|
-| Red ✗ — `Missing secret "NEYNAR_API_KEY"` | Secret name has a typo | Go to Settings → Secrets and check spelling exactly |
-| Green ✅ but no Telegram message | Bot ran but no matching posts found yet | Normal — wait for a real airdrop post to appear |
-| `chat not found` error | Wrong chat ID | Try adding `-` before the number: `-1331104714` |
-| Yellow circle spinning for >4 min | Workflow hung | Check the logs; it will auto-cancel at 4 minutes |
-| Workflow doesn't appear in Actions tab | File path was wrong | Make sure the file is at `.github/workflows/airdrop-bot.yml` exactly |
-
----
-
-## Summary of What GitHub Is Doing For You
-```
-Every 5 minutes, automatically:
-
-  GitHub servers wake up
-       ↓
-  Download your bot.js
-       ↓
-  Load seen.json from cache (remembers old posts)
-       ↓
-  Check Farcaster channels for new posts
-       ↓
-  Send Telegram alerts for keyword matches
-       ↓
-  Save updated seen.json back to cache
-       ↓
-  Go to sleep until next 5-minute mark
+          WARPCAST_SECRET: ${{ secrets.WARPCAST_SECRET }}
+        run: node index.js
