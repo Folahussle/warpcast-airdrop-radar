@@ -2,7 +2,7 @@ name: Airdrop Bot
 on:
   schedule:
     - cron: '0 * * * *' # Runs every hour
-  workflow_dispatch: # Allows manual testing
+  workflow_dispatch: # Allows you to run it manually for testing
 
 jobs:
   run-bot:
@@ -11,15 +11,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js # Or Python/Go
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.10'
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          python -m pip install --upgrade pip
+          pip install farcaster requests python-dotenv
 
       - name: Run Bot
         env:
-          WARPCAST_SECRET: ${{ secrets.WARPCAST_SECRET }}
-        run: node index.js
+          # Make sure these match the names in your "Secrets" settings
+          WARPCAST_MNEMONIC: ${{ secrets.WARPCAST_MNEMONIC }}
+          WARPCAST_ID: ${{ secrets.WARPCAST_ID }}
+        run: python bot.py
