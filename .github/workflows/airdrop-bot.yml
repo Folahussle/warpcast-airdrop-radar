@@ -2,7 +2,7 @@ name: Airdrop Bot
 on:
   schedule:
     - cron: '0 * * * *' # Runs every hour
-  workflow_dispatch: # Allows you to run it manually for testing
+  workflow_dispatch: # Manual trigger
 
 jobs:
   run-bot:
@@ -19,11 +19,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install farcaster requests python-dotenv
+          pip install requests python-dotenv
 
       - name: Run Bot
         env:
-          # Make sure these match the names in your "Secrets" settings
-          WARPCAST_MNEMONIC: ${{ secrets.WARPCAST_MNEMONIC }}
-          WARPCAST_ID: ${{ secrets.WARPCAST_ID }}
+          NEYNAR_API_KEY: ${{ secrets.NEYNAR_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FARCASTER_CHANNELS: airdrop
+          KEYWORDS: airdrop
+          DRY_RUN: 'false'
         run: python bot.py
