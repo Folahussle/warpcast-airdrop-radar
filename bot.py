@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Farcaster Airdrop Alert Bot
+Farcaster & Twitter Airdrop Alert Bot
 Runs via GitHub Actions — no local setup needed.
 Deduplication is handled via seen.json cache.
 """
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 NEYNAR_API_KEY = os.getenv('NEYNAR_API_KEY')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+TWITTER_API_KEY = os.getenv('TWITTER_API_KEY')
 CHANNELS = [ch.strip() for ch in os.getenv('FARCASTER_CHANNELS', 'airdrop').split(',')]
 KEYWORDS = [kw.strip().lower() for kw in os.getenv('KEYWORDS', 'airdrop').split(',')]
 DRY_RUN = os.getenv('DRY_RUN', 'false').lower() == 'true'
@@ -37,6 +38,7 @@ def validate_secrets():
         'NEYNAR_API_KEY': NEYNAR_API_KEY,
         'TELEGRAM_BOT_TOKEN': TELEGRAM_BOT_TOKEN,
         'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
+        'TWITTER_API_KEY': TWITTER_API_KEY,
     }
     for key, val in required.items():
         if not val:
@@ -47,7 +49,7 @@ validate_secrets()
 
 # Load / save seen hashes
 def load_seen():
-    """Load previously seen cast hashes from cache."""
+    """Load previously seen post IDs from cache."""
     try:
         if os.path.exists(SEEN_FILE):
             with open(SEEN_FILE, 'r') as f:
@@ -59,11 +61,11 @@ def load_seen():
         return set()
 
 def save_seen(seen):
-    """Save seen hashes to cache, keeping only recent 5000."""
+    """Save seen post IDs to cache, keeping only recent 5000."""
     trimmed = sorted(list(seen))[-5000:]
     with open(SEEN_FILE, 'w') as f:
         json.dump(trimmed, f, indent=2)
-    logger.info(f'Saved {len(trimmed)} seen hashes to cache.')
+    logger.info(f'Saved {len(trimmed)} seen post IDs to cache.')
 
 # Helper functions
 def escape_html(text):
@@ -98,6 +100,31 @@ def fetch_channel_casts(channel):
         return []
     except RequestException as err:
         logger.error(f'Error fetching casts from {channel}: {err}')
+        return []
+
+# Fetch tweets from Twitter
+def fetch_twitter_airdrop_tweets():
+    """Fetch airdrop tweets from Twitter API."""
+    try:
+        url = 'https://api.twitterapi.io/search'
+        params = {
+            'query': 'airdrop',
+            'type': 'Latest',
+            'count': 25
+        }
+        headers = {'Authorization': f'Bearer {TWITTER_API_KEY}'}
+        response = requests.get(url, params=params, headers=headers, timeout=12)
+        response.raise_for_status()
+        tweets = response.json().get('tweets', [])
+        return tweets
+    except HTTPError as err:
+        if err.response.status_code == 401:
+            logger.error('Invalid TWITTER_API_KEY')
+        else:
+            logger.error(f'HTTP error fetching tweets: {err}')
+        return []
+    except RequestException as err:
+        logger.error(f'Error fetching tweets: {err}')
         return []
 
 # Send Telegram message with retry
@@ -141,8 +168,8 @@ def matches_keywords(text):
     """Check if text contains any of the keywords."""
     return any(kw in (text or '').lower() for kw in KEYWORDS)
 
-def format_message(cast, channel):
-    """Format cast into Telegram message with HTML."""
+def format_farcaster_message(cast, channel):
+    """Format Farcaster cast into Telegram message with HTML."""
     author = escape_html(cast.get('author', {}).get('username', 'unknown'))
     body = escape_html(cast.get('text', ''))
     cast_hash = cast.get('hash', '')
@@ -159,7 +186,7 @@ def format_message(cast, channel):
     else:
         time_str = ts() + ' UTC'
     
-    msg = f'🪂 <b>New Airdrop Alert — #{escape_html(channel)}</b>\n\n'
+    msg = f'🪂 <b>New Airdrop Alert — Farcaster #{escape_html(channel)}</b>\n\n'
     msg += f'👤 @{author}\n'
     msg += f'💬 {body}\n\n'
     msg += f'🔗 <a href="{cast_url}">View on Warpcast</a>'
@@ -170,7 +197,28 @@ def format_message(cast, channel):
     msg += f'\n⏰ {time_str}'
     return msg
 
-# Poll a single channel
+def format_twitter_message(tweet):
+    """Format Twitter tweet into Telegram message with HTML."""
+    author = escape_html(tweet.get('author', {}).get('username', 'unknown'))
+    body = escape_html(tweet.get('text', ''))
+    tweet_id = tweet.get('id', '')
+    tweet_url = f'https://twitter.com/{author}/status/{tweet_id}'
+    extra_url = extract_url(tweet.get('text', ''))
+    
+    timestamp = tweet.get('created_at', ts())
+    
+    msg = f'🪂 <b>New Airdrop Alert — Twitter</b>\n\n'
+    msg += f'👤 @{author}\n'
+    msg += f'💬 {body}\n\n'
+    msg += f'🔗 <a href="{tweet_url}">View on Twitter</a>'
+    
+    if extra_url:
+        msg += f'\n🌐 <a href="{escape_html(extra_url)}">Linked URL</a>'
+    
+    msg += f'\n⏰ {timestamp}'
+    return msg
+
+# Poll a single Farcaster channel
 def poll_channel(channel, seen):
     """Poll a Farcaster channel for new airdrop alerts."""
     try:
@@ -186,30 +234,59 @@ def poll_channel(channel, seen):
             
             seen.add(cast_hash)
             sent += 1
-            send_telegram(format_message(cast, channel))
+            send_telegram(format_farcaster_message(cast, channel))
             time.sleep(TELEGRAM_DELAY)
         
         status = f'{sent} alert(s) sent ✅' if sent > 0 else 'no new matches 🔍'
-        logger.info(f'[{ts()}] #{channel} — {status}')
+        logger.info(f'[{ts()}] Farcaster #{channel} — {status}')
     except Exception as err:
-        logger.error(f'[{ts()}] Error on #{channel}: {err}')
+        logger.error(f'[{ts()}] Error on Farcaster #{channel}: {err}')
+
+# Poll Twitter for airdrop tweets
+def poll_twitter(seen):
+    """Poll Twitter for new airdrop alerts."""
+    try:
+        tweets = fetch_twitter_airdrop_tweets()
+        sent = 0
+        
+        for tweet in tweets:
+            tweet_id = tweet.get('id')
+            if not tweet_id or tweet_id in seen:
+                continue
+            if not matches_keywords(tweet.get('text', '')):
+                continue
+            
+            seen.add(tweet_id)
+            sent += 1
+            send_telegram(format_twitter_message(tweet))
+            time.sleep(TELEGRAM_DELAY)
+        
+        status = f'{sent} alert(s) sent ✅' if sent > 0 else 'no new matches 🔍'
+        logger.info(f'[{ts()}] Twitter — {status}')
+    except Exception as err:
+        logger.error(f'[{ts()}] Error on Twitter: {err}')
 
 # Main execution
 def main():
     """Main bot loop."""
     logger.info('=' * 60)
-    logger.info('  Farcaster Airdrop Bot — GitHub Actions Run')
+    logger.info('  Farcaster & Twitter Airdrop Bot — GitHub Actions Run')
     logger.info('=' * 60)
-    logger.info(f'Channels : {", ".join(CHANNELS)}')
-    logger.info(f'Keywords : {", ".join(KEYWORDS)}')
-    logger.info(f'Dry-run  : {DRY_RUN}')
+    logger.info(f'Farcaster Channels : {", ".join(CHANNELS)}')
+    logger.info(f'Keywords           : {", ".join(KEYWORDS)}')
+    logger.info(f'Monitoring Twitter : Yes')
+    logger.info(f'Dry-run            : {DRY_RUN}')
     logger.info('')
     
     seen = load_seen()
-    logger.info(f'Loaded {len(seen)} previously seen hashes from cache.\n')
+    logger.info(f'Loaded {len(seen)} previously seen post IDs from cache.\n')
     
+    # Poll Farcaster channels
     for channel in CHANNELS:
         poll_channel(channel, seen)
+    
+    # Poll Twitter
+    poll_twitter(seen)
     
     save_seen(seen)
     logger.info('\nRun complete. GitHub Actions will run this again on schedule.')
